@@ -1,0 +1,48 @@
+= ultradns4r
+
+ultradns4r is a Ruby library and command line client for the Neustar UltraDNS SOAP API.
+
+== Installation
+
+  1. Install {Ruby}[http://www.ruby-lang.org/]
+  2. Install {RubyGems}[http://rubygems.org]
+  3. Install {Savon}[http://github.com/rubiii/savon]
+  4. Download {http://github.com/mconigliaro/ultradns4r/raw/master/ultradns4r.rb}[ultradns4r.rb]
+
+== Using this library in your own project
+
+  require 'ultradns4r'
+  client = UltraDns::Client.new('username', 'password')
+  response = client.soap_call('get_server_status')
+  pp response
+
+== Using the built-in command line client
+
+  1. Create a file called *ultradns4r.secret* containing your UltraDNS username and password (i.e. on one line separated by whitespace)
+  2. See examples below:
+
+=== Examples
+
+Note that all domain names must be fully qualified and end with a period.
+
+==== Create an A record
+
+  ultradns4r.rb -n test.example.org. 1.1.1.1
+
+==== Create multiple A records for the same address
+
+  ultradns4r.rb -n test.example.org. 1.1.1.1,2.2.2.2,3.3.3.3
+
+==== Create a CNAME record
+
+  ultradns4r.rb -n test.example.org. -t CNAME test.example.org.
+
+==== Create an SRV record
+
+  ultradns4r.rb -n srv.example.org. -t SRV 0 10 20 target.example.org.
+
+=== Help and Troubleshooting
+
+See the *--help* command line option:
+
+  ultradns4r.rb --help
