@@ -4,10 +4,10 @@ ultradns4r is a Ruby library and command line client for the Neustar UltraDNS SO
 
 == Installation
 
-  1. Install {Ruby}[http://www.ruby-lang.org/]
-  2. Install {RubyGems}[http://rubygems.org]
-  3. Install {Savon}[http://github.com/rubiii/savon]
-  4. Download {http://github.com/mconigliaro/ultradns4r/raw/master/ultradns4r.rb}[ultradns4r.rb]
+1. Install {Ruby}[http://www.ruby-lang.org/]
+2. Install {RubyGems}[http://rubygems.org]
+3. Install {Savon}[http://github.com/rubiii/savon]
+4. Download {http://github.com/mconigliaro/ultradns4r/raw/master/ultradns4r.rb}[ultradns4r.rb]
 
 == Using this library in your own project
 
@@ -18,8 +18,8 @@ ultradns4r is a Ruby library and command line client for the Neustar UltraDNS SO
 
 == Using the built-in command line client
 
-  1. Create a file called *ultradns4r.secret* containing your UltraDNS username and password (i.e. on one line separated by whitespace)
-  2. See examples below:
+1. Create a file called *ultradns4r.secret* containing your UltraDNS username and password (i.e. on one line separated by whitespace)
+2. See examples below:
 
 === Examples
 
