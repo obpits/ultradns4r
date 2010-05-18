@@ -20,21 +20,19 @@ module UltraDns
 
     # constructor
     def initialize(username, password)
-
-      wsdl = 'http://ultra-api.ultradns.com:8008//UltraDNS_WS?wsdl'
+      wsdl = 'https://ultra-api.ultradns.com/UltraDNS_WS?wsdl'
       @soap_client = soap_client = Savon::Client.new(wsdl)
-      @soap_namespace = 'http://webservice.api.ultra.neustar.com/'
-      timestamp = Time.now.strftime(Savon::SOAP::DateTimeFormat)
-      nonce = Digest::SHA1.hexdigest(String.random + timestamp)
-      token = nonce + timestamp + password
-      #password = Base64.encode64(Digest::SHA1.hexdigest(token)).chomp!
+      @soap_namespaces = {
+        'xmlns:wsdl' => 'http://webservice.api.ultra.neustar.com/',
+        'xmlns:sch'  => 'http://schema.ultraservice.neustar.com/'
+      }
       @wsse_header = {
         'wsse:Security' => {
           'wsse:UsernameToken' => {
             'wsse:Username' => username,
             'wsse:Password' => password,
-            'wsse:Nonce' => nonce,
-            'wsu:Created' => timestamp,
+            'wsse:Nonce' => Digest::SHA1.hexdigest(String.random + Time.now.to_i.to_s),
+            'wsu:Created' => Time.now.strftime(Savon::SOAP::DateTimeFormat),
             :attributes! => {
               'wsse:Password' => {
                 'Type' => 'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText'
@@ -67,7 +65,7 @@ module UltraDns
       @soap_error = nil
 
       response = @soap_client.send(method.to_sym) do |soap|
-        soap.namespace = @soap_namespace
+        soap.namespaces.merge!(@soap_namespaces)
         soap.header = @wsse_header
 
         # map method name to soap call name when necessary
@@ -75,8 +73,6 @@ module UltraDns
           when /get_resource_records_of_dname_by_type!?/
             soap.action = 'getResourceRecordsOfDNameByType'
             soap.input = 'getResourceRecordsOfDNameByType'
-          when /create_resource_record!?/
-            soap.input = [ "createResourceRecord", { "xmlns:sch" => "http://webservice.api.ultra.neustar.com/" } ]
         end
 
         soap.body = args
@@ -156,7 +152,7 @@ if __FILE__ == $0
 
   # set default command line options
   options = {
-    :cred_file => './ultradns4r.secret',
+    :cred_file => File.expand_path('~/ultradns4r.secret'),
     :username  => nil,
     :password  => nil,
     :zone      => nil,
