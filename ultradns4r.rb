@@ -1,9 +1,22 @@
 #!/usr/bin/ruby -W0
-#
+################################################################################
 # ultradns4r - Ruby library and command line client for Neustar UltraDNS SOAP API
+# Copyright (c) 2010 Michael Conigliaro <mike [at] conigliaro [dot] org>
 #
-# Author: Michael Conigliaro <mike [at] conigliaro [dot] org>
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
 #
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+################################################################################
 
 require 'logger'
 require 'optparse'
@@ -16,7 +29,7 @@ module UltraDns
 
   class Client
 
-    attr_reader :soap_error
+    attr_reader :error
 
     # constructor
     def initialize(username, password)
@@ -62,35 +75,46 @@ module UltraDns
 
     # do soap call
     def soap_call(method, args = {})
-      @soap_error = nil
-
-      response = @soap_client.send(method.to_sym) do |soap|
-        soap.namespaces.merge!(@soap_namespaces)
-        soap.header = @wsse_header
-
-        # map method name to soap call name when necessary
-        case method
-          when /get_resource_records_of_dname_by_type!?/
-            soap.action = 'getResourceRecordsOfDNameByType'
-            soap.input = 'getResourceRecordsOfDNameByType'
+      tries = 0
+      begin
+        if tries > 0
+          sleep(3)
         end
 
-        soap.body = args
-      end
+        # do soap call
+        response = @soap_client.send(method.to_sym) do |soap|
+          soap.namespaces.merge!(@soap_namespaces)
+          soap.header = @wsse_header
 
-      # save errors
-      if !Savon::Response.raise_errors?
-        if response.soap_fault?
-          if response.to_hash[:fault][:detail]
-            @soap_error = '%s (Fault code: %d)' % [response.to_hash[:fault][:detail][:ultra_ws_exception][:error_description],
-                                     response.to_hash[:fault][:detail][:ultra_ws_exception][:error_code]]
-          else
-            @soap_error = '%s' % response.to_hash[:fault][:faultstring]
+          # map method name to soap call name when necessary
+          case method
+            when /get_resource_records_of_dname_by_type!?/
+              soap.action = 'getResourceRecordsOfDNameByType'
+              soap.input = 'getResourceRecordsOfDNameByType'
           end
-        elsif response.http_error?
-          @soap_error = response.http_error
+
+          soap.body = args
         end
-      end
+
+        tries += 1
+
+        # save errors
+        @error = nil
+        if !Savon::Response.raise_errors?
+          if response.soap_fault?
+            if response.to_hash[:fault][:detail]
+              @error = '%s (Fault code: %d)' % [response.to_hash[:fault][:detail][:ultra_ws_exception][:error_description],
+                                       response.to_hash[:fault][:detail][:ultra_ws_exception][:error_code]]
+            else
+              @error = '%s' % response.to_hash[:fault][:faultstring]
+            end
+          elsif response.http_error?
+            @error = response.http_error
+          end
+        end
+
+      # Cannot open: file:/opt/apps/ultradns/ultra_api/server/node2/data/wsdl/UltraDNS.ear/UltraDNS_WS.jar/UltraWebServiceService41762.wsdl
+      end while @error =~ /^Cannot open: file:/ and tries < 20
 
       return response
     end
@@ -165,7 +189,8 @@ if __FILE__ == $0
 
   # parse command line options
   OptionParser.new do |opts|
-    opts.banner = "Usage: #{$0} [OPTIONS] RR-DATA[, ...]\nExample: #{$0} -n srv.example.org. -t SRV 0 10 20 target.example.org."
+    opts.banner = "Usage: #{$0} [options] [rr-data][, ...]\n" \
+      + "Example: #{$0} -n srv.example.org. -t SRV 0 10 20 target.example.org."
 
     opts.on('-c', '--credentials-file VALUE', 'Path to file containing API username/password (default: %s)' % options[:cred_file]) do |c|
       options[:cred_file] = c
@@ -175,15 +200,15 @@ if __FILE__ == $0
       options[:zone] = z
     end
 
-    opts.on('-n', '--rr-name VALUE', 'DNS record name (default: %s)' % options[:rrname]) do |n|
+    opts.on('-n', '--rr-name VALUE', 'Resource record name (default: %s)' % options[:rrname]) do |n|
       options[:rrname] = n
     end
 
-    opts.on('-s', '--rr-ttl VALUE', 'DNS record TTL (default: %s)' % options[:rrttl]) do |s|
+    opts.on('-s', '--rr-ttl VALUE', 'Resource record TTL (default: %s)' % options[:rrttl]) do |s|
       options[:rrttl] = s
     end
 
-    opts.on('-t', '--rr-type VALUE', 'DNS record type (default: %s)' % options[:rrtype]) do |t|
+    opts.on('-t', '--rr-type VALUE', 'Resource record type (default: %s)' % options[:rrtype]) do |t|
       options[:rrtype] = t
     end
 
@@ -220,9 +245,6 @@ if __FILE__ == $0
   end
   if ARGV.size > 0
     options[:rrdata] = ARGV.join(' ').split(',')
-  else
-    log.error('No rr-data specified')
-    Process.exit(1)
   end
 
   # instantiate ultradns client
@@ -230,16 +252,16 @@ if __FILE__ == $0
 
   # check if zone exists
   response = c.soap_call('get_zone_info!', {'zoneName' => options[:zone]})
-  if c.soap_error
-    log.error('Unable to obtain info for zone "%s" - %s' % [options[:zone], c.soap_error])
+  if c.error
+    log.error('Unable to obtain info for zone "%s" - %s' % [options[:zone], c.error])
     Process.exit(1)
   end
 
   # get transaction id
   if not options[:dry_run]
     response = c.soap_call('start_transaction!')
-    if c.soap_error
-      log.error('Unable to get transaction ID - %s' % c.soap_error)
+    if c.error
+      log.error('Unable to get transaction ID - %s' % c.error)
       Process.exit(1)
     else
       transaction_id = response.to_hash[:start_transaction_response][:transaction_id]
@@ -247,11 +269,23 @@ if __FILE__ == $0
     end
   end
 
+  # enable automatic serial updating
+  if not options[:dry_run]
+    response = c.soap_call('auto_serial_update!', {
+      'transactionID'         => transaction_id,
+      'autoSerialUpdateValue' => 'enable'})
+    if c.error
+      log.error('Unable to enable automatic serial updating - %s' % c.error)
+    else
+      log.info('Enabled automatic serial updating')
+    end
+  end
+
   # query for existing records
   response = c.soap_call('get_resource_records_of_dname_by_type!',
     {'zoneName' => options[:zone], 'hostName' => options[:rrname], 'rrType' => UltraDns::Client.get_rr_type_id(options[:rrtype])})
-  if c.soap_error
-    log.error('Query for existing records failed - %s' % c.soap_error)
+  if c.error
+    log.error('Query for existing records failed - %s' % c.error)
   else
 
     # make sure we're always dealing with an array of resource records
@@ -271,9 +305,9 @@ if __FILE__ == $0
           [rr[:d_name], options[:rrtype], rr[:info_values][:info1_value], rr[:guid]])
       else
         c.soap_call('delete_resource_record!', {'transactionID' => transaction_id, 'guid' => rr[:guid]})
-        if c.soap_error
+        if c.error
           log.warn('Failed to delete record (Name="%s" Type="%s" Target="%s", GUID="%s") - %s' %
-            [rr[:d_name], options[:rrtype], rr[:info_values][:info1_value], rr[:guid], c.soap_error])
+            [rr[:d_name], options[:rrtype], rr[:info_values][:info1_value], rr[:guid], c.error])
         else
           log.warn('Deleted record (Name="%s" Type="%s" Target="%s", GUID="%s")' %
             [rr[:d_name], options[:rrtype], rr[:info_values][:info1_value], rr[:guid]])
@@ -282,48 +316,50 @@ if __FILE__ == $0
     end
 
     # loop through each rr datum
-    options[:rrdata].each do |rrdata|
+    if options[:rrdata]
+      options[:rrdata].each do |rrdata|
 
-      # build InfoValues array for new record
-      InfoValues = {}
-      rrdata.split(' ').each do |value|
-        InfoValues['Info' + (InfoValues.length + 1).to_s + 'Value'] = value
-      end
+        # build InfoValues array for new record
+        InfoValues = {}
+        rrdata.split(' ').each do |value|
+          InfoValues['Info' + (InfoValues.length + 1).to_s + 'Value'] = value
+        end
 
-      # build new record request
-      rr_hash = {
-        'transactionID' => transaction_id,
-        'resourceRecord' => {
-          'sch:InfoValues' => '',
-          :attributes! => {
-            'sch:InfoValues' => InfoValues
-          }
-        },
-        :attributes! => {
+        # build new record request
+        rr_hash = {
+          'transactionID' => transaction_id,
           'resourceRecord' => {
-            'ZoneName' => options[:zone],
-            'DName'    => options[:rrname],
-            'TTL'      => options[:rrttl],
-            'Type'     => UltraDns::Client.get_rr_type_id(options[:rrtype])
+            'sch:InfoValues' => '',
+            :attributes! => {
+              'sch:InfoValues' => InfoValues
+            }
+          },
+          :attributes! => {
+            'resourceRecord' => {
+              'ZoneName' => options[:zone],
+              'DName'    => options[:rrname],
+              'TTL'      => options[:rrttl],
+              'Type'     => UltraDns::Client.get_rr_type_id(options[:rrtype])
+            }
           }
         }
-      }
 
-      # add new record
-      if options[:dry_run]
-        log.warn('Will create record (Zone="%s", Name="%s" TTL="%s", Type="%s", Data="%s")' %
-          [options[:zone], options[:rrname], options[:rrttl], options[:rrtype], rrdata])
-      else
-        c.soap_call('create_resource_record!', rr_hash)
-        if c.soap_error
-          log.error('Failed to create record (Zone="%s", Name="%s" TTL="%s", Type="%s", Data="%s") - %s' %
-            [options[:zone], options[:rrname], options[:rrttl], options[:rrtype], rrdata, c.soap_error])
-        else
-          log.warn('Created record (Zone="%s", Name="%s" TTL="%s", Type="%s", Data="%s")' %
+        # add new record
+        if options[:dry_run]
+          log.warn('Will create record (Zone="%s", Name="%s" TTL="%s", Type="%s", Data="%s")' %
             [options[:zone], options[:rrname], options[:rrttl], options[:rrtype], rrdata])
+        else
+          c.soap_call('create_resource_record!', rr_hash)
+          if c.error
+            log.error('Failed to create record (Zone="%s", Name="%s" TTL="%s", Type="%s", Data="%s") - %s' %
+              [options[:zone], options[:rrname], options[:rrttl], options[:rrtype], rrdata, c.error])
+          else
+            log.warn('Created record (Zone="%s", Name="%s" TTL="%s", Type="%s", Data="%s")' %
+              [options[:zone], options[:rrname], options[:rrttl], options[:rrtype], rrdata])
+          end
         end
-      end
 
+      end
     end
 
   end
@@ -331,11 +367,11 @@ if __FILE__ == $0
   # commit/rollback transaction
   if not options[:dry_run]
     c.soap_call('commit_transaction!', {'transactionID' => transaction_id})
-    if c.soap_error
-      log.error('Failed to commit transaction with ID "%s" - %s' % [transaction_id, c.soap_error])
+    if c.error
+      log.error('Failed to commit transaction with ID "%s" - %s' % [transaction_id, c.error])
       c.soap_call('rollback_transaction!', {'transactionID' => transaction_id})
-      if c.soap_error
-        log.fatal('Failed to roll back transaction with ID "%s" - %s' % [transaction_id, c.soap_error])
+      if c.error
+        log.fatal('Failed to roll back transaction with ID "%s" - %s' % [transaction_id, c.error])
       end
     else
       log.info('Committed transaction with ID "%s"' % transaction_id)

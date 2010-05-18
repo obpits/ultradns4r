@@ -18,12 +18,18 @@ ultradns4r is a Ruby library and command line client for the Neustar UltraDNS SO
 
 == Using the built-in command line client
 
-1. Create a file called <b>ultradns4r.secret</b> containing your UltraDNS username and password (i.e. on one line separated by whitespace)
+1. Create a file called <b>ultradns4r.secret</b> containing your UltraDNS username and password (i.e. on one line separated by whitespace). Note that this file is assumed to be in your home directory by default.
 2. See examples below:
 
-=== Examples
+=== General usage
 
-Note that all domain names must be fully qualified and end with a period.
+  ultradns4r.rb [options] [rr-data][, ...]
+
+- Multiple sets of rr-data can be specified by separating them with commas.
+- Records can be deleted by not specifying rr-data.
+- All domain names must be fully qualified and end with a period (this is an UltraDNS requirement).
+
+=== Examples
 
 ==== Create an A record
 
@@ -46,3 +52,7 @@ Note that all domain names must be fully qualified and end with a period.
 See the <b>--help</b> command line option:
 
   ultradns4r.rb --help
+
+Use debug logging:
+
+  ultradns4r.rb -v debug
