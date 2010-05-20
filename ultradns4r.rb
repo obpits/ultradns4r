@@ -176,7 +176,7 @@ if __FILE__ == $0
 
   # set default command line options
   options = {
-    :cred_file => File.expand_path('~/ultradns4r.secret'),
+    :cred_file => './ultradns4r.secret',
     :username  => nil,
     :password  => nil,
     :zone      => nil,
