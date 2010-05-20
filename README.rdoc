@@ -18,7 +18,7 @@ ultradns4r is a Ruby library and command line client for the Neustar UltraDNS SO
 
 == Using the built-in command line client
 
-1. Create a file called <b>ultradns4r.secret</b> containing your UltraDNS username and password (i.e. on one line separated by whitespace). Note that this file is assumed to be in your home directory by default.
+1. Create a file called <b>ultradns4r.secret</b> containing your UltraDNS username and password (i.e. on one line separated by whitespace). Note that this file is assumed to be in the current directory by default.
 2. See examples below:
 
 === General usage
@@ -35,7 +35,7 @@ ultradns4r is a Ruby library and command line client for the Neustar UltraDNS SO
 
   ultradns4r.rb -n test.example.org. 1.1.1.1
 
-==== Create multiple A records for the same address
+==== Create round-robin A records
 
   ultradns4r.rb -n test.example.org. 1.1.1.1,2.2.2.2,3.3.3.3
 
