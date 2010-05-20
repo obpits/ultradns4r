@@ -192,32 +192,36 @@ if __FILE__ == $0
     opts.banner = "Usage: #{$0} [options] [rr-data][, ...]\n" \
       + "Example: #{$0} -n srv.example.org. -t SRV 0 10 20 target.example.org."
 
-    opts.on('-c', '--credentials-file VALUE', 'Path to file containing API username/password (default: %s)' % options[:cred_file]) do |c|
-      options[:cred_file] = c
+    opts.on('-c', '--credentials-file VALUE', 'Path to file containing API username/password (default: %s)' % options[:cred_file]) do |opt|
+      options[:cred_file] = opt
     end
 
-    opts.on('-z', '--zone VALUE', 'DNS Zone (default: Auto-detect)') do |z|
-      options[:zone] = z
+    opts.on('-z', '--zone VALUE', 'DNS Zone (default: Auto-detect)') do |opt|
+      options[:zone] = opt
     end
 
-    opts.on('-n', '--rr-name VALUE', 'Resource record name (default: %s)' % options[:rrname]) do |n|
-      options[:rrname] = n
+    opts.on('-n', '--rr-name VALUE', 'Resource record name (default: %s)' % options[:rrname]) do |opt|
+      options[:rrname] = opt
     end
 
-    opts.on('-s', '--rr-ttl VALUE', 'Resource record TTL (default: %s)' % options[:rrttl]) do |s|
-      options[:rrttl] = s
+    opts.on('-s', '--rr-ttl VALUE', 'Resource record TTL (default: %s)' % options[:rrttl]) do |opt|
+      options[:rrttl] = opt
     end
 
-    opts.on('-t', '--rr-type VALUE', 'Resource record type (default: %s)' % options[:rrtype]) do |t|
-      options[:rrtype] = t
+    opts.on('-t', '--rr-type VALUE', 'Resource record type (default: %s)' % options[:rrtype]) do |opt|
+      options[:rrtype] = opt
     end
 
-    opts.on('-v', '--verbosity VALUE', 'Log verbosity (default: %s)' % options[:log_level]) do |v|
-      options[:log_level] = v
+    opts.on('-v', '--verbosity VALUE', 'Log verbosity (default: %s)' % options[:log_level]) do |opt|
+      options[:log_level] = opt
     end
 
-    opts.on('--dry-run', "Perform a trial run without making changes") do |d|
-      options[:dry_run] = d
+    opts.on('--dry-run', "Perform a trial run without making changes") do |opt|
+      options[:dry_run] = opt
+    end
+
+    opts.on('--use-transaction', "All operations are performed within a single transaction") do |opt|
+      options[:use_transaction] = opt
     end
   end.parse!
 
@@ -258,7 +262,7 @@ if __FILE__ == $0
   end
 
   # get transaction id
-  if not options[:dry_run]
+  if options[:use_transaction] and not options[:dry_run]
     response = c.soap_call('start_transaction!')
     if c.error
       log.error('Unable to get transaction ID - %s' % c.error)
@@ -267,10 +271,12 @@ if __FILE__ == $0
       transaction_id = response.to_hash[:start_transaction_response][:transaction_id]
       log.info('Got transaction ID "%s"' % transaction_id)
     end
+  else
+    transaction_id = nil
   end
 
   # enable automatic serial updating
-  if not options[:dry_run]
+  if options[:use_transaction] and not options[:dry_run]
     response = c.soap_call('auto_serial_update!', {
       'transactionID'         => transaction_id,
       'autoSerialUpdateValue' => 'enable'})
@@ -282,8 +288,10 @@ if __FILE__ == $0
   end
 
   # query for existing records
-  response = c.soap_call('get_resource_records_of_dname_by_type!',
-    {'zoneName' => options[:zone], 'hostName' => options[:rrname], 'rrType' => UltraDns::Client.get_rr_type_id(options[:rrtype])})
+  response = c.soap_call('get_resource_records_of_dname_by_type!', {
+    'zoneName' => options[:zone],
+    'hostName' => options[:rrname],
+    'rrType'   => UltraDns::Client.get_rr_type_id(options[:rrtype])})
   if c.error
     log.error('Query for existing records failed - %s' % c.error)
   else
@@ -298,13 +306,17 @@ if __FILE__ == $0
       end
     end
 
-    # delete existing records
+    # loop through existing records
     resource_records.each do |rr|
+
+      # delete existing records
       if options[:dry_run]
         log.warn('Will delete record (Name="%s" Type="%s" Target="%s", GUID="%s")' %
           [rr[:d_name], options[:rrtype], rr[:info_values][:info1_value], rr[:guid]])
       else
-        c.soap_call('delete_resource_record!', {'transactionID' => transaction_id, 'guid' => rr[:guid]})
+        c.soap_call('delete_resource_record!', {
+          'transactionID' => transaction_id,
+          'guid' => rr[:guid]})
         if c.error
           log.warn('Failed to delete record (Name="%s" Type="%s" Target="%s", GUID="%s") - %s' %
             [rr[:d_name], options[:rrtype], rr[:info_values][:info1_value], rr[:guid], c.error])
@@ -365,7 +377,7 @@ if __FILE__ == $0
   end
 
   # commit/rollback transaction
-  if not options[:dry_run]
+  if options[:use_transaction] and not options[:dry_run]
     c.soap_call('commit_transaction!', {'transactionID' => transaction_id})
     if c.error
       log.error('Failed to commit transaction with ID "%s" - %s' % [transaction_id, c.error])
