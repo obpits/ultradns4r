@@ -1,7 +1,5 @@
 = ultradns4r
 
-<b>Notice: Since my company has moved away from UltraDNS, I no longer have any way of maintaining this project. If you'd like to fork it and take it over, please let me know.</b>
-
 ultradns4r is a Ruby library and command line client for the Neustar UltraDNS SOAP API.
 
 == Installation
@@ -9,7 +7,7 @@ ultradns4r is a Ruby library and command line client for the Neustar UltraDNS SO
 1. Install {Ruby}[http://www.ruby-lang.org/]
 2. Install {RubyGems}[http://rubygems.org]
 3. Install {Savon}[http://github.com/rubiii/savon]
-4. Download {ultradns4r.rb}[http://github.com/mconigliaro/ultradns4r/raw/master/ultradns4r.rb]
+4. Download {ultradns4r.rb}[https://raw.github.com/obpits/ultradns4r/master/ultradns4r.rb]
 
 == Using this library in your own project
 
