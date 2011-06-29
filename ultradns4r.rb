@@ -18,11 +18,11 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 ################################################################################
 
+require 'rubygems'
 require 'logger'
 require 'optparse'
 require 'pp'
 require 'socket'
-require 'rubygems'
 require 'savon'
 
 module UltraDns
@@ -35,42 +35,8 @@ module UltraDns
     def initialize(username, password)
       wsdl = 'https://ultra-api.ultradns.com/UltraDNS_WS?wsdl'
       @soap_client = soap_client = Savon::Client.new(wsdl)
-      @soap_namespaces = {
-        'xmlns:wsdl' => 'http://webservice.api.ultra.neustar.com/',
-        'xmlns:sch'  => 'http://schema.ultraservice.neustar.com/'
-      }
-      @wsse_header = {
-        'wsse:Security' => {
-          'wsse:UsernameToken' => {
-            'wsse:Username' => username,
-            'wsse:Password' => password,
-            'wsse:Nonce' => Digest::SHA1.hexdigest(String.random + Time.now.to_i.to_s),
-            'wsu:Created' => Time.now.strftime(Savon::SOAP::DateTimeFormat),
-            :attributes! => {
-              'wsse:Password' => {
-                'Type' => 'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText'
-              }
-            },
-            :order! => [
-              'wsse:Username',
-              'wsse:Password',
-              'wsse:Nonce',
-              'wsu:Created'
-            ]
-          },
-          :attributes! => {
-            'wsse:UsernameToken' => {
-              'wsu:Id' => 'UsernameToken-1',
-              'xmlns:wsu' => 'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd'
-            }
-          }
-        },
-        :attributes! => {
-          'wsse:Security' => {
-            'xmlns:wsse' => 'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd'
-          }
-        }
-      }.to_soap_xml
+
+      soap_client.wsse.credentials username, password
     end
 
     # do soap call
@@ -82,34 +48,24 @@ module UltraDns
         end
 
         # do soap call
-        response = @soap_client.send(method.to_sym) do |soap|
-          soap.namespaces.merge!(@soap_namespaces)
-          soap.header = @wsse_header
-
-          # map method name to soap call name when necessary
-          case method
-            when /get_resource_records_of_dname_by_type!?/
-              soap.action = 'getResourceRecordsOfDNameByType'
-              soap.input = 'getResourceRecordsOfDNameByType'
-          end
-
-          soap.body = args
+        response = @soap_client.request(:wsdl, method.to_sym, :body => args) do |soap|
+          soap.element_form_default = :unqualified
         end
 
         tries += 1
 
         # save errors
         @error = nil
-        if !Savon::Response.raise_errors?
+        if !Savon.raise_errors?
           if response.soap_fault?
             if response.to_hash[:fault][:detail]
-              @error = '%s (Fault code: %d)' % [response.to_hash[:fault][:detail][:ultra_ws_exception][:error_description],
+              @error = 'soap fault %s (Fault code: %d)' % [response.to_hash[:fault][:detail][:ultra_ws_exception][:error_description],
                                        response.to_hash[:fault][:detail][:ultra_ws_exception][:error_code]]
             else
-              @error = '%s' % response.to_hash[:fault][:faultstring]
+              @error = 'soap fault %s' % response.to_hash[:fault][:faultstring]
             end
           elsif response.http_error?
-            @error = response.http_error
+            @error = "http error " +response.http_error
           end
         end
 
@@ -180,7 +136,6 @@ if __FILE__ == $0
     :username  => nil,
     :password  => nil,
     :zone      => nil,
-    :rrname    => Socket.gethostbyname(Socket.gethostname).first + '.',
     :rrttl     => 86400,
     :rrtype    => 'A',
     :rrdata    => nil,
@@ -227,11 +182,11 @@ if __FILE__ == $0
 
   # instantiate logger
   log = Logger.new(STDOUT)
-  Savon::Request.logger = log
+  Savon.logger = log
   log.level = eval('Logger::' + options[:log_level].upcase)
 
   # disable savon exceptions so we can access the error descriptions
-  Savon::Response.raise_errors = false
+  Savon.raise_errors = false
 
   # validate command line options
   begin
@@ -288,7 +243,7 @@ if __FILE__ == $0
   end
 
   # query for existing records
-  response = c.soap_call('get_resource_records_of_dname_by_type!', {
+  response = c.soap_call('get_resource_records_of_d_name_by_type!', {
     'zoneName' => options[:zone],
     'hostName' => options[:rrname],
     'rrType'   => UltraDns::Client.get_rr_type_id(options[:rrtype])})
